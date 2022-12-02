@@ -244,51 +244,62 @@ endif
 #############################################################################
 # Build Targets
 #############################################################################
+BINARIES := spire-server spire-agent k8s-workload-registrar oidc-discovery-provider
+
+# GOOS ?= linux
+GOARCH ?= amd64
 
 .PHONY: build
-
-build: tidy bin/spire-server bin/spire-agent bin/k8s-workload-registrar bin/oidc-discovery-provider
+build: tidy $(addprefix bin/$(GOARCH)/,$(BINARIES))
 
 define binary_rule
-.PHONY: $1
-$1: | go-check bin/
-	@echo Building $1...
-	$(E)$(go_path) go build $$(go_flags) -ldflags '$$(go_ldflags)' -o $1$(exe) $2
+bin/$2/%: $1/% FORCE | go-check bin/$2
+	@echo Building $$@...
+	$$(E)GOOS=$$(GOOS) GOARCH=$$(GOARCH) $$(go_path) go build $$(go_flags) -ldflags '$$(go_ldflags)' -o $$@$(exe) ./$$<
 endef
 
 # main SPIRE binaries
-$(eval $(call binary_rule,bin/spire-server,./cmd/spire-server))
-$(eval $(call binary_rule,bin/spire-agent,./cmd/spire-agent))
-$(eval $(call binary_rule,bin/k8s-workload-registrar,./support/k8s/k8s-workload-registrar))
-$(eval $(call binary_rule,bin/oidc-discovery-provider,./support/oidc-discovery-provider))
+$(eval $(call binary_rule,cmd,amd64))
+$(eval $(call binary_rule,support,amd64))
+$(eval $(call binary_rule,support/k8s,amd64))
+$(eval $(call binary_rule,cmd,arm64))
+$(eval $(call binary_rule,support,arm64))
+$(eval $(call binary_rule,support/k8s,arm64))
 
 bin/:
+	@mkdir -p $@
+
+bin/arm64:
+	@mkdir -p $@
+
+bin/amd64:
 	@mkdir -p $@
 
 #############################################################################
 # Build Static binaries for scratch docker images
 #############################################################################
 
-.PHONY: build-static
+STATIC_BINARIES := $(addsuffix -static,$(BINARIES))
 
 # The build-static is intended to statically link to musl libc.
 # There are possibilities of unexpected errors when statically link to GLIBC.
-build-static: tidy bin/spire-server-static bin/spire-agent-static bin/k8s-workload-registrar-static bin/oidc-discovery-provider-static
+build-static: tidy $(addprefix bin/$(GOARCH)/,$(STATIC_BINARIES))
 
 # https://7thzero.com/blog/golang-w-sqlite3-docker-scratch-image
 define binary_rule_static
-.PHONY: $1
-$1: | go-check bin/
-	@echo Building $1...
-	$(E)$(go_path) CGO_ENABLED=1 go build $$(go_flags) -ldflags '$$(go_ldflags) -linkmode external -extldflags "-static"' -o $1$(exe) $2
+bin/$2/%-static: $1/% FORCE | go-check bin/$2
+	@echo Building $$@...
+	$$(E)GOOS=$$(GOOS) GOARCH=$$(GOARCH) $$(go_path) CGO_ENABLED=1 go build $$(go_flags) -ldflags '$$(go_ldflags) -linkmode external -extldflags "-static"' -o $$@$(exe) ./$$<
 
 endef
 
 # static builds
-$(eval $(call binary_rule_static,bin/spire-server-static,./cmd/spire-server))
-$(eval $(call binary_rule_static,bin/spire-agent-static,./cmd/spire-agent))
-$(eval $(call binary_rule_static,bin/k8s-workload-registrar-static,./support/k8s/k8s-workload-registrar))
-$(eval $(call binary_rule_static,bin/oidc-discovery-provider-static,./support/oidc-discovery-provider))
+$(eval $(call binary_rule_static,cmd,amd64))
+$(eval $(call binary_rule_static,support,amd64))
+$(eval $(call binary_rule_static,support/k8s,amd64))
+$(eval $(call binary_rule_static,cmd,arm64))
+$(eval $(call binary_rule_static,support,arm64))
+$(eval $(call binary_rule_static,support/k8s,arm64))
 
 #############################################################################
 # Test Targets
